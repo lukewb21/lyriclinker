@@ -8,6 +8,7 @@ async function server(){
     const path = require('path');
     const app = express();
     const querystring = require('querystring');
+    const dotenv = require('dotenv');
 
     // SET PORT FOR SERVER //
     const PORT = 3000;
@@ -35,34 +36,33 @@ async function server(){
     }
 
     // GET ACCESS TOKEN //
-    function getToken(code){
+    async function getToken(code) {
         const clientId = client_id;
         const clientSecret = client_secret;
         const authorizationCode = code;
         const redirectUri = redirect_uri;
-
+    
         const authString = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
         const tokenEndpoint = 'https://accounts.spotify.com/api/token';
-
+    
         const requestBody = {
             grant_type: 'authorization_code',
             code: authorizationCode,
             redirect_uri: redirectUri
         };
-
+    
         const headers = {
             'Authorization': `Basic ${authString}`,
             'Content-Type': 'application/x-www-form-urlencoded'
         };
-
-        axios.post(tokenEndpoint, new URLSearchParams(requestBody), { headers })
-        .then(response => {
-            console.log(response.data);
-        })
-        .catch(error => {
-            console.error('Error:', error.response ? error.response.data : error.message);
-        });
     
+        try {
+            const response = await axios.post(tokenEndpoint, new URLSearchParams(requestBody), { headers });
+            return response.data;
+        } catch (error) {
+            console.error('Error during token retrieval:', error.response ? error.response.data : error.message);
+            throw error; // Re-throw the error to be caught by the calling function
+        }
     }
 
     // SPOTIFY API REQUEST //
@@ -84,15 +84,26 @@ async function server(){
 
     // HOMEPAGE //
     app.get('/', (req, res) => {
-        const code = req.query.code;
-        const state = req.query.state;
-        console.log("Code: " + code + " | State: " + state);
-
         res.sendFile(path.join(__dirname, 'public', 'index.html'));
     });
 
     // SEARCH PAGE //
-    app.get('/search', (req, res) => {
+    app.get('/search', async (req, res) => {
+        const code = req.query.code;
+        console.log("Code: " + code);
+
+        const state = req.query.state;
+        console.log("State: " + state);
+
+        const tokenResponse = await getToken(code);
+
+        if (tokenResponse && tokenResponse.access_token) {
+            const token = tokenResponse.access_token;
+            console.log("Token: " + token);
+        } else {
+            console.error('Unable to retrieve access token');
+        }
+
         res.render('pages/_search');
     });
 
