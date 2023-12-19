@@ -9,6 +9,7 @@ async function server(){
     const app = express();
     const querystring = require('querystring');
     const dotenv = require('dotenv');
+    var token = "";
 
     // SET PORT FOR SERVER //
     const PORT = 3000;
@@ -65,21 +66,57 @@ async function server(){
         }
     }
 
-    // SPOTIFY API REQUEST //
-    function spotifyAPI(urlPath, code){
-        var url = "https://api.spotify.com/v1/" + urlPath;
+    // SPOTIFY API REQUESTS //
+    async function spotifyAPI(urlPath, APItoken) {
+        try {
+            const url = "https://api.spotify.com/v1/" + urlPath;
+    
+            const headers = {
+                'Authorization': `Bearer ${APItoken}`
+            };
+    
+            const response = await axios.get(url, { headers });
+            console.log(response.data);
+            return(response.data);
+        } catch (error) {
+            console.error('Error during Spotify API request:', error.response ? error.response.data : error.message);
+        }
+    }
 
-        const headers = {
-            'Authorization': `Bearer ${code}`
-        };
-        
-        axios.get(url, { headers })
-            .then(response => {
-                console.log(response.data);
-            })
-            .catch(error => {
-                console.error('Error:', error.response ? error.response.data : error.message)
-            });
+    // GET ALBUM //
+    async function getAlbum(albumID){
+        const urlEnd = "albums/" + albumID;
+        return await spotifyAPI(urlEnd, token); 
+    }
+
+    // GET ALBUM TRACKS //
+    async function getAlbumTracks(albumID){
+        const urlEnd = "albums/" + albumID +"/tracks";
+        return await spotifyAPI(urlEnd, token); 
+    }
+
+    // GET ARTIST //
+    async function getArtist(artistID){
+        const urlEnd = "artists/" + artistID;
+        return await spotifyAPI(urlEnd, token); 
+    }
+
+    // GET SIMILAR ARTISTS //
+    async function getSimilarArtists(artistIDs){
+        const urlEnd = "artists/" + artistIDs + "/related";
+        return await spotifyAPI(urlEnd, token); 
+    }
+
+    // GET TRACK //
+    async function getTrack(trackID){
+        const urlEnd = "tracks/" + tracksID;
+        return await spotifyAPI(urlEnd, token); 
+    }
+
+    // GET RECOMMENDATIONS (BY ARTISTS) (OBSCURE) //
+    async function getRecs(artistIDs){
+        const urlEnd = "recommendations?limit=10&seed_artists=" + artistIDs +"&min_popularity=0&max_popularity=25";
+        return await spotifyAPI(urlEnd, token);
     }
 
     // HOMEPAGE //
@@ -95,16 +132,31 @@ async function server(){
         const state = req.query.state;
         console.log("State: " + state);
 
-        const tokenResponse = await getToken(code);
+        var tokenResponse = {};
 
-        if (tokenResponse && tokenResponse.access_token) {
-            const token = tokenResponse.access_token;
-            console.log("Token: " + token);
+        // if code not found in parameters, display homepage //
+        if (code != null){
+            tokenResponse = await getToken(code);
         } else {
-            console.error('Unable to retrieve access token');
+            res.sendFile(path.join(__dirname, 'public', 'index.html'));
         }
 
-        res.render('pages/_search');
+        // if accesstoken not found in api response, display homepage //
+        if (tokenResponse && tokenResponse.access_token) {
+            token = tokenResponse.access_token;
+            console.log("Token: " + token);
+
+            // MAIN CODE //
+
+            await getRecs("70S4sHnxr55YQxZ53H5guq"); // CHANGE HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+            //-----------//
+            res.render('pages/_search');
+        } else {
+            console.error('Unable to retrieve access token');
+            res.sendFile(path.join(__dirname, 'public', 'index.html'));
+        }
+
     });
 
     // SPOTIFY LOGIN //
