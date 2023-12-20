@@ -9,6 +9,8 @@ async function server(){
     const app = express();
     const querystring = require('querystring');
     const dotenv = require('dotenv');
+    const cookieParser = require('cookie-parser');
+
     var token = "";
 
     // SET PORT FOR SERVER //
@@ -19,10 +21,11 @@ async function server(){
     const config = require('./config');
     const client_id = config.clientId;
     const client_secret = config.clientSecret;
-    const redirect_uri = 'http://localhost:3000/search';
+    const redirect_uri = 'http://192.168.1.149:3000/search';
 
     // SET RENDERING ENGINE //
     app.use(express.static(path.join(__dirname, 'public')));
+    app.use(cookieParser());
     app.set('view engine', 'ejs');
 
     // RANDOM STRING GENERATOR FOR LOGIN //
@@ -34,6 +37,21 @@ async function server(){
           result += characters.charAt(randomIndex);
         }
         return result;
+    }
+
+    // RANDOM NUMBER GENERATOR FOR RECOMMENDATION //
+    function getRandomNumber(max) {
+        // Ensure max is a positive integer
+        x = Math.floor(max);
+      
+        if (isNaN(max) || max <= 0) {
+          throw new Error("Input must be a positive integer");
+        }
+      
+        // Generate a random number between 1 and max
+        const randomNumber = Math.floor(Math.random() * max) + 1;
+      
+        return randomNumber;
     }
 
     // GET ACCESS TOKEN //
@@ -76,7 +94,7 @@ async function server(){
             };
     
             const response = await axios.get(url, { headers });
-            console.log(response.data);
+
             return(response.data);
         } catch (error) {
             console.error('Error during Spotify API request:', error.response ? error.response.data : error.message);
@@ -113,10 +131,50 @@ async function server(){
         return await spotifyAPI(urlEnd, token); 
     }
 
-    // GET RECOMMENDATIONS (BY ARTISTS) (OBSCURE) //
+    // GET RECOMMENDATIONS (BY ARTISTS) (OBSCURITY = <25/50) //
     async function getRecs(artistIDs){
-        const urlEnd = "recommendations?limit=10&seed_artists=" + artistIDs +"&min_popularity=0&max_popularity=25";
+        const urlEnd = "recommendations?limit=50&seed_artists=" + artistIDs +"&min_popularity=0&max_popularity=25";
         return await spotifyAPI(urlEnd, token);
+    }
+
+    // SEARCH ITEM //
+    async function searchAPI(query, type){
+        const urlEnd = "search?q=" + query + "&type=" + type;
+        return await spotifyAPI(urlEnd, token);
+    }
+
+    // GET 1 TRACK REC FROM ARTIST NAME //
+    async function getTrackRec(query){
+        // get artist ID //
+        const searchResult = await searchAPI(query, "artist");
+        const artistID = searchResult.artists.items[0].id;
+
+        // get recs based on search //
+        const recommendations = await getRecs(artistID); // CHANGE HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        // get number of results //
+        var maxResults = recommendations.seeds[0].afterFilteringSize;
+
+        if (maxResults > 50){
+            maxResults = 50;
+        };
+
+        // get random number from 1 to max //
+        const trackNum = getRandomNumber(maxResults);
+        
+        // get song from API result at position x //
+        const trackInfo = recommendations.tracks[trackNum];
+
+        // Get track info //
+        const trackID = "test";
+        const trackName = trackInfo.name;
+        const trackCover = trackInfo.album.images[0].url;
+        const trackArtist = trackInfo.artists[0].name;
+        console.log(trackArtist);
+
+        const trackInfoArr = [trackID, trackName, trackCover, trackArtist];
+
+        return trackInfoArr;
     }
 
     // HOMEPAGE //
@@ -132,6 +190,13 @@ async function server(){
         const state = req.query.state;
         console.log("State: " + state);
 
+        if (req.cookies.LoginSession = undefined){
+            res.cookie('LoginSession', code, {
+                maxAge: 1000 * 60 * 60, // expires after 1 hour //
+                httpOnly: true
+            });
+        };
+
         var tokenResponse = {};
 
         // if code not found in parameters, display homepage //
@@ -146,16 +211,36 @@ async function server(){
             token = tokenResponse.access_token;
             console.log("Token: " + token);
 
-            // MAIN CODE //
-
-            await getRecs("70S4sHnxr55YQxZ53H5guq"); // CHANGE HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-            //-----------//
             res.render('pages/_search');
+
         } else {
             console.error('Unable to retrieve access token');
             res.sendFile(path.join(__dirname, 'public', 'index.html'));
-        }
+        };
+
+    });
+
+    // RESULT PAGE //
+    app.get('/result', async (req, res) => {
+        const code = req.cookies.LoginSession;
+        const query = req.query.query;
+
+        const songInfo = await getTrackRec(query);
+
+        const id = songInfo[0];
+        const title = songInfo[1];
+        const cover = songInfo[2];
+        const artist = songInfo[3];
+
+        console.log("RECOMMENDATION FOUND!");
+        console.log("TITLE: " + title);
+        console.log("ARTIST: " + artist);
+
+        res.render('pages/_result',{
+            albumCoverUrl: cover,
+            songTitle: title,
+            artistName: artist
+        });
 
     });
 
@@ -182,7 +267,7 @@ async function server(){
 
     // START LOCAL SERVER //
     app.listen(PORT, () => {
-        console.log("Server is running at http://localhost:" + PORT);
+        console.log("Server is running at http://192.168.1.149:" + PORT);
     });
 }
 
